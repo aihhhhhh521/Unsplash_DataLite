@@ -147,7 +147,30 @@ python scripts/unsplash_lite_tool.py download-from-csv \
   --output-dir outputs/images_forest_mountain \
   --delay 0.3
 ```
+如需记录下载过程中的元数据（支持中断恢复后保留已完成记录），可追加两个参数：
 
+```bash
+python scripts/unsplash_lite_tool.py download-from-csv \
+  --input-csv outputs/forest_mountain_all.csv \
+  --output-dir outputs/images_forest_mountain \
+  --metadata-jsonl outputs/images_forest_mountain/metadata.jsonl \
+  --manifest-json outputs/images_forest_mountain/manifest.json
+```
+
+- `--metadata-jsonl`：每张图下载完成后立刻追加 1 行 JSON（append + flush）。
+- `--manifest-json`：任务结束后输出最终汇总（含 `summary` 与 `records`）。
+
+#### CSV 列名约定（对应元数据字段）
+
+脚本会优先从输入 CSV 读取可用字段，推荐列名如下（有别名也可自动识别）：
+
+- 基础字段：`photo_id`, `photo_image_url`, `search_keyword`（或 `keyword` / `matched_keywords`）
+- 分辨率字段：`width`, `height`（或 `photo_width`, `photo_height`, `W`, `H`）
+- Header 尺寸：`header_W`, `header_H`（或小写变体）
+- EXIF 字段：`focal_length`, `aperture`, `exposure_time`, `iso`（或 `exif_*` 前缀）
+- 统计字段：`laplacian_var`, `subject_saliency_ratio`
+
+如果 CSV 没有这些列，脚本会在下载成功后补充可直接获取的值（例如文件大小、图片宽高、宽高比、最短边）。
 ---
 
 ## 4. 推荐工作流（从 0 到可分析）

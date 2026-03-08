@@ -16,16 +16,19 @@ import concurrent.futures
 import csv
 import glob
 import json
+import math
 import random
 import re
 import ssl
+import struct
 import sys
 import time
 import urllib.parse
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterator, List, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, Sequence, Tuple
 
 TABLE_BASENAMES = ["photos", "keywords", "collections", "conversions", "colors"]
 
@@ -401,6 +404,192 @@ def run_download_task(
 
     return result
 
+def _clean_text(value: str | None) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def pick_first_value(row: Dict[str, str], *keys: str) -> str:
+    for key in keys:
+        if key in row:
+            value = _clean_text(row.get(key))
+            if value:
+                return value
+    return ""
+
+
+def to_float_or_none(value: str | None) -> float | None:
+    raw = _clean_text(value)
+    if not raw:
+        return None
+    try:
+        val = float(raw)
+    except ValueError:
+        return None
+    if not math.isfinite(val):
+        return None
+    return val
+
+
+def to_int_or_none(value: str | None) -> int | None:
+    val = to_float_or_none(value)
+    if val is None:
+        return None
+    return int(round(val))
+
+
+def read_image_size(path: Path) -> Tuple[int | None, int | None]:
+    try:
+        with path.open("rb") as f:
+            head = f.read(32)
+            if len(head) < 10:
+                return None, None
+
+            if head.startswith(b"\x89PNG\r\n\x1a\n"):
+                f.seek(16)
+                chunk = f.read(8)
+                if len(chunk) == 8:
+                    return struct.unpack(">II", chunk)
+
+            if head[:3] == b"GIF":
+                f.seek(6)
+                chunk = f.read(4)
+                if len(chunk) == 4:
+                    width, height = struct.unpack("<HH", chunk)
+                    return int(width), int(height)
+
+            if head.startswith(b"RIFF") and head[8:12] == b"WEBP":
+                f.seek(12)
+                vp8_header = f.read(4)
+                if vp8_header == b"VP8 ":
+                    f.seek(26)
+                    chunk = f.read(4)
+                    if len(chunk) == 4:
+                        width, height = struct.unpack("<HH", chunk)
+                        return int(width & 0x3FFF), int(height & 0x3FFF)
+                if vp8_header == b"VP8L":
+                    f.seek(21)
+                    chunk = f.read(4)
+                    if len(chunk) == 4:
+                        b0, b1, b2, b3 = chunk
+                        width = 1 + (((b1 & 0x3F) << 8) | b0)
+                        height = 1 + (((b3 & 0x0F) << 10) | (b2 << 2) | ((b1 & 0xC0) >> 6))
+                        return int(width), int(height)
+                if vp8_header == b"VP8X":
+                    f.seek(24)
+                    chunk = f.read(6)
+                    if len(chunk) == 6:
+                        width = 1 + int.from_bytes(chunk[0:3], "little")
+                        height = 1 + int.from_bytes(chunk[3:6], "little")
+                        return width, height
+
+            if head.startswith(b"\xff\xd8"):
+                f.seek(2)
+                while True:
+                    marker_start = f.read(1)
+                    if not marker_start:
+                        break
+                    if marker_start != b"\xff":
+                        continue
+                    marker = f.read(1)
+                    while marker == b"\xff":
+                        marker = f.read(1)
+                    if not marker:
+                        break
+                    marker_byte = marker[0]
+                    if marker_byte in {0xD8, 0xD9}:
+                        continue
+                    length_bytes = f.read(2)
+                    if len(length_bytes) != 2:
+                        break
+                    seg_len = struct.unpack(">H", length_bytes)[0]
+                    if seg_len < 2:
+                        break
+                    if marker_byte in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}:
+                        data = f.read(seg_len - 2)
+                        if len(data) >= 5:
+                            height, width = struct.unpack(">HH", data[1:5])
+                            return int(width), int(height)
+                        break
+                    f.seek(seg_len - 2, 1)
+    except OSError:
+        return None, None
+
+    return None, None
+
+
+def make_metadata_record(task: Dict[str, Any], result: Dict[str, object]) -> Dict[str, Any]:
+    row: Dict[str, str] = task["row"]
+    local_path = task["target"]
+    status = str(result.get("status", "failed"))
+    error = _clean_text(str(result.get("error", "")))
+    downloaded_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    csv_w = to_int_or_none(pick_first_value(row, "width", "photo_width", "W", "w"))
+    csv_h = to_int_or_none(pick_first_value(row, "height", "photo_height", "H", "h"))
+
+    header_w = to_int_or_none(pick_first_value(row, "header_W", "header_w"))
+    header_h = to_int_or_none(pick_first_value(row, "header_H", "header_h"))
+
+    if status == "ok":
+        file_path = Path(local_path)
+        if header_w is None or header_h is None or csv_w is None or csv_h is None:
+            detected_w, detected_h = read_image_size(file_path)
+            if header_w is None:
+                header_w = detected_w
+            if header_h is None:
+                header_h = detected_h
+            if csv_w is None:
+                csv_w = detected_w
+            if csv_h is None:
+                csv_h = detected_h
+
+    width = csv_w
+    height = csv_h
+    min_side = min(width, height) if width and height else None
+    aspect_ratio = (round(width / height, 6) if width and height and height != 0 else None)
+    header_pixels = (header_w * header_h) if header_w and header_h else None
+
+    filesize_kb = None
+    if status == "ok":
+        bytes_size = result.get("bytes", 0)
+        if isinstance(bytes_size, (int, float)):
+            filesize_kb = round(float(bytes_size) / 1024, 3)
+
+    exif_data = {
+        "focal_length": pick_first_value(row, "focal_length", "exif_focal_length") or None,
+        "aperture": pick_first_value(row, "aperture", "exif_aperture") or None,
+        "exposure_time": pick_first_value(row, "exposure_time", "exif_exposure_time") or None,
+        "iso": to_int_or_none(pick_first_value(row, "iso", "exif_iso")),
+    }
+
+    pipeline_metrics = {
+        "filesize_kb": filesize_kb,
+        "header_W": header_w,
+        "header_H": header_h,
+        "header_pixels": header_pixels,
+        "W": width,
+        "H": height,
+        "min_side": min_side,
+        "aspect_ratio": aspect_ratio,
+        "laplacian_var": to_float_or_none(pick_first_value(row, "laplacian_var")),
+        "subject_saliency_ratio": to_float_or_none(pick_first_value(row, "subject_saliency_ratio")),
+    }
+
+    return {
+        "photo_id": task["photo_id"],
+        "photo_image_url": task["url"],
+        "local_path": local_path,
+        "status": status,
+        "error": error or None,
+        "downloaded_at": downloaded_at,
+        "search_keyword": pick_first_value(row, "search_keyword", "keyword", "matched_keywords") or None,
+        "resolution": [width, height] if width and height else None,
+        "exif_data": exif_data,
+        "pipeline_metrics": pipeline_metrics,
+    }
+
 def cmd_download_from_csv(
     input_csv: Path,
     output_dir: Path,
@@ -410,6 +599,8 @@ def cmd_download_from_csv(
     timeout: float,
     retries: int,
     backoff: float,
+    metadata_jsonl: Path | None,
+    manifest_json: Path | None,
 ) -> int:
     if not input_csv.exists():
         print(f"输入文件不存在: {input_csv}")
@@ -424,39 +615,89 @@ def cmd_download_from_csv(
         rows = rows[:limit]
 
     tasks, skipped = build_download_tasks(rows, output_dir)
+    row_index: Dict[str, Dict[str, str]] = {row.get("photo_id", ""): row for row in rows if row.get("photo_id")}
+    for task in tasks:
+        task["row"] = row_index.get(task["photo_id"], {})
     total = len(tasks)
     success = 0
     failed = 0
+    metadata_records: List[Dict[str, Any]] = []
+    started_at = time.perf_counter()
+
+    metadata_handle = None
+    if metadata_jsonl is not None:
+        metadata_jsonl.parent.mkdir(parents=True, exist_ok=True)
+        metadata_handle = metadata_jsonl.open("a", encoding="utf-8")
 
     if total == 0:
         print(f"没有可下载任务（跳过 {skipped} 条）。")
+        if manifest_json is not None:
+            manifest_json.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "summary": {
+                    "total": 0,
+                    "success": 0,
+                    "failed": 0,
+                    "skipped": skipped,
+                    "elapsed_seconds": 0.0,
+                },
+                "records": [],
+            }
+            manifest_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return 0
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(workers, 1)) as executor:
-        futures = [
-            executor.submit(
-                run_download_task,
-                task,
-                timeout,
-                retries,
-                backoff,
-                delay_s,
-            )
-            for task in tasks
-        ]
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(workers, 1)) as executor:
+            futures = {
+                executor.submit(
+                    run_download_task,
+                    task,
+                    timeout,
+                    retries,
+                    backoff,
+                    delay_s,
+                ): task
+                for task in tasks
+            }
 
-        for done, future in enumerate(concurrent.futures.as_completed(futures), start=1):
-            result = future.result()
-            photo_id = result["photo_id"]
-            status = result["status"]
-            elapsed = result["elapsed"]
-            if status == "ok":
-                success += 1
-                size = result["bytes"]
-                print(f"[{done}/{total}] 下载成功: {photo_id} ({size} bytes, {elapsed:.2f}s)")
-            else:
-                failed += 1
-                print(f"[{done}/{total}] 下载失败: {photo_id} ({result['error']}, {elapsed:.2f}s)")
+            for done, future in enumerate(concurrent.futures.as_completed(futures), start=1):
+                result = future.result()
+                task = futures[future]
+                photo_id = result["photo_id"]
+                status = result["status"]
+                elapsed = result["elapsed"]
+                if status == "ok":
+                    success += 1
+                    size = result["bytes"]
+                    print(f"[{done}/{total}] 下载成功: {photo_id} ({size} bytes, {elapsed:.2f}s)")
+                else:
+                    failed += 1
+                    print(f"[{done}/{total}] 下载失败: {photo_id} ({result['error']}, {elapsed:.2f}s)")
+
+                metadata_record = make_metadata_record(task, result)
+                metadata_records.append(metadata_record)
+                if metadata_handle is not None:
+                    metadata_handle.write(json.dumps(metadata_record, ensure_ascii=False) + "\n")
+                    metadata_handle.flush()
+    finally:
+        if metadata_handle is not None:
+            metadata_handle.close()
+
+    total_elapsed = time.perf_counter() - started_at
+
+    if manifest_json is not None:
+        manifest_json.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "summary": {
+                "total": total,
+                "success": success,
+                "failed": failed,
+                "skipped": skipped,
+                "elapsed_seconds": round(total_elapsed, 3),
+            },
+            "records": metadata_records,
+        }
+        manifest_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"完成：成功 {success}，失败 {failed}，跳过 {skipped}，目录 {output_dir}")
     return 0
