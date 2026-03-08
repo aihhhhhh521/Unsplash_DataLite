@@ -147,7 +147,12 @@ python scripts/unsplash_lite_tool.py download-from-csv \
   --output-dir outputs/images_forest_mountain \
   --delay 0.3
 ```
-如需记录下载过程中的元数据（支持中断恢复后保留已完成记录），可追加两个参数：
+可选参数（新增）：
+
+- `--metadata-jsonl`：每张图下载完成后立刻追加 1 行 JSON（append + flush）。
+- `--manifest-json`：任务结束后输出最终汇总（含 `summary` 与 `records`）。
+
+如需记录下载过程中的元数据（支持中断恢复后保留已完成记录），可使用如下命令：
 
 ```bash
 python scripts/unsplash_lite_tool.py download-from-csv \
@@ -157,8 +162,10 @@ python scripts/unsplash_lite_tool.py download-from-csv \
   --manifest-json outputs/images_forest_mountain/manifest.json
 ```
 
-- `--metadata-jsonl`：每张图下载完成后立刻追加 1 行 JSON（append + flush）。
-- `--manifest-json`：任务结束后输出最终汇总（含 `summary` 与 `records`）。
+#### 失败恢复建议
+
+- 已存在的目标文件会自动跳过，适合断点续跑。
+- `metadata.jsonl` 采用追加写入，任务中断后再次执行可持续累积已完成记录。
 
 #### CSV 列名约定（对应元数据字段）
 
@@ -171,6 +178,44 @@ python scripts/unsplash_lite_tool.py download-from-csv \
 - 统计字段：`laplacian_var`, `subject_saliency_ratio`
 
 如果 CSV 没有这些列，脚本会在下载成功后补充可直接获取的值（例如文件大小、图片宽高、宽高比、最短边）。
+
+### 3.7 端到端示例（筛选→采样→下载→产出元数据）
+
+以下流程可直接复制执行：
+
+```bash
+# 1) 查看数据集摘要（确认分片可被正确识别）
+python scripts/unsplash_lite_tool.py \
+  --dataset-dir unsplash-research-dataset-lite-latest \
+  summary --pretty
+
+# 2) 按关键词筛选并随机采样
+python scripts/unsplash_lite_tool.py \
+  --dataset-dir unsplash-research-dataset-lite-latest \
+  filter-sample \
+  --keywords forest,mountain \
+  --sample-size 80 \
+  --seed 123 \
+  --output-csv outputs/forest_mountain_sample.csv
+
+# 3) 根据采样 CSV 下载图片，并同时输出 metadata/manifest
+python scripts/unsplash_lite_tool.py download-from-csv \
+  --input-csv outputs/forest_mountain_sample.csv \
+  --output-dir outputs/images_forest_mountain \
+  --metadata-jsonl outputs/images_forest_mountain/metadata.jsonl \
+  --manifest-json outputs/images_forest_mountain/manifest.json \
+  --delay 0.3
+
+# 4) 查看产物目录
+ls -lah outputs/images_forest_mountain
+```
+
+关键输出文件含义：
+
+- `outputs/forest_mountain_sample.csv`：筛选 + 采样结果，作为下载输入。
+- `outputs/images_forest_mountain/*.jpg`（或其他扩展名）：实际下载的图片文件。
+- `outputs/images_forest_mountain/metadata.jsonl`：逐条下载记录，便于断点续跑排查。
+- `outputs/images_forest_mountain/manifest.json`：本次任务的最终汇总（成功/失败统计 + 记录列表）。
 ---
 
 ## 4. 推荐工作流（从 0 到可分析）
