@@ -50,6 +50,20 @@ def parse_split_index(filename: str, basename: str) -> int | None:
 
 
 def detect_delimiter(path: Path) -> str:
+    """检测分隔符。
+
+    Unsplash Lite 官方示例按 `sep='\t'` 读取，即使文件名是 `.csv`。
+    因此这里优先根据文件内容判断：首行若 Tab 数不少于逗号数，则按 TSV 处理。
+    """
+    with path.open("r", encoding="utf-8", newline="") as f:
+        first_line = f.readline()
+
+    if first_line:
+        tab_count = first_line.count("\t")
+        comma_count = first_line.count(",")
+        if tab_count >= comma_count:
+            return "\t"
+
     if path.suffix.lower().startswith(".tsv"):
         return "\t"
     return ","
