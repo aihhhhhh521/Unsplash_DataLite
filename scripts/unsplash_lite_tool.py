@@ -16,6 +16,8 @@ import csv
 import glob
 import json
 import random
+import re
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -23,6 +25,28 @@ from pathlib import Path
 from typing import Dict, Iterator, List, Sequence, Tuple
 
 TABLE_BASENAMES = ["photos", "keywords", "collections", "conversions", "colors"]
+
+def configure_csv_field_limit() -> None:
+    """放宽 csv 单字段默认长度限制，避免超长字段触发 _csv.Error。"""
+    limit = None
+    for candidate in (sys.maxsize, 2**31 - 1):
+        try:
+            csv.field_size_limit(candidate)
+            limit = candidate
+            break
+        except OverflowError:
+            continue
+    if limit is None:
+        csv.field_size_limit(131072)
+
+
+def parse_split_index(filename: str, basename: str) -> int | None:
+    """解析分片序号，兼容 photos.csv000 / photos.csv.000 / photos.tsv001 等命名。"""
+    m = re.fullmatch(rf"{re.escape(basename)}\.(csv|tsv)(?:\.)?(\d+)", filename)
+    if not m:
+        return None
+    return int(m.group(2))
+
 
 
 def detect_delimiter(path: Path) -> str:
@@ -48,12 +72,12 @@ def find_table_parts(dataset_dir: Path, basename: str) -> List[Path]:
     if plain:
         return sorted(plain)
 
-    split = []
+    split: List[Tuple[int, Path]] = []
     for p in unique:
-        suffix = p.name.split(".")[-1]
-        if suffix.isdigit():
-            split.append(p)
-    return sorted(split, key=lambda p: int(p.name.split(".")[-1]))
+        idx = parse_split_index(p.name, basename)
+        if idx is not None:
+            split.append((idx, p))
+    return [p for _, p in sorted(split, key=lambda x: x[0])]
 
 
 def iter_rows(paths: Sequence[Path], delimiter: str) -> Iterator[Dict[str, str]]:
@@ -331,6 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    configure_csv_field_limit()
     parser = build_parser()
     args = parser.parse_args()
     dataset_dir: Path = args.dataset_dir
