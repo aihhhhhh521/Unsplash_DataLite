@@ -599,8 +599,8 @@ def cmd_download_from_csv(
     timeout: float,
     retries: int,
     backoff: float,
-    metadata_jsonl: Path | None,
-    manifest_json: Path | None,
+    metadata_jsonl: Path | None = None,
+    manifest_json: Path | None = None,
 ) -> int:
     if not input_csv.exists():
         print(f"输入文件不存在: {input_csv}")
@@ -753,6 +753,18 @@ def build_parser() -> argparse.ArgumentParser:
     dl.add_argument("--backoff", type=float, default=1.0, help="指数退避基数秒数，默认: 1.0")
     dl.add_argument("--delay", type=float, default=0.0, help="可选限速：每个任务结束后的等待秒数")
     dl.add_argument("--limit", type=int, default=0, help="最多下载多少条，0 表示不限制")
+    dl.add_argument(
+        "--metadata-jsonl",
+        type=Path,
+        default=None,
+        help="可选：将每条下载结果以 JSONL 追加写入该文件",
+    )
+    dl.add_argument(
+        "--manifest-json",
+        type=Path,
+        default=None,
+        help="可选：将本次下载汇总与明细写入 JSON 文件",
+    )
 
     return parser
 
@@ -790,6 +802,8 @@ def main() -> int:
             timeout=args.timeout,
             retries=args.retries,
             backoff=args.backoff,
+            metadata_jsonl=args.metadata_jsonl,
+            manifest_json=args.manifest_json,
         )
 
     parser.print_help()
