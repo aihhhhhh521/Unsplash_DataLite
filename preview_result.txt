@@ -1,0 +1,108 @@
+(Unsplash_DataLite) PS D:\PyProjects\Unsplash_DataLite> python scripts/unsplash_lite_tool.py --dataset-dir unsplash-research-dataset-lite-latest summary --pretty
+{
+  "photos": {
+    "parts": [
+      "photos.csv"
+    ],
+    "rows": 24382,
+    "columns": [
+      "photo_id\tphoto_url\tphoto_image_url\tphoto_submitted_at\tphoto_featured\tphoto_width\tphoto_height\tphoto_aspect_ratio\tphoto_description\tphotographer_username\tphotographer_first_name\tphotographer_last_name\texif_camera_make\texif_camera_model\texif_iso\texif_aperture_value\texif_focal_length\texif_exposure_time\tphoto_location_name\tphoto_location_latitude\tphoto_location_longitude\tphoto_location_country\tphoto_location_city\tstats_views\tstats_downloads\tai_description\tai_primary_landmark_name\tai_primary_landmark_latitude\tai_primary_landmark_longitude\tai_primary_landmark_confidence\tblur_hash"
+    ],
+    "preview": [
+      {
+        "photo_id\tphoto_url\tphoto_image_url\tphoto_submitted_at\tphoto_featured\tphoto_width\tphoto_height\tphoto_aspect_ratio\tphoto_description\tphotographer_username\tphotographer_first_name\tphotographer_last_name\texif_camera_make\texif_camera_model\texif_iso\texif_aperture_value\texif_focal_length\texif_exposure_time\tphoto_location_name\tphoto_location_latitude\tphoto_location_longitude\tphoto_location_country\tphoto_location_city\tstats_views\tstats_downloads\tai_description\tai_primary_landmark_name\tai_primary_landmark_latitude\tai_primary_landmark_longitude\tai_primary_landmark_confidence\tblur_hash": "oSf8ePoG9NU\thttps://unsplash.com/photos/oSf8ePoG9NU\thttps://images.unsplash.com/20/frozen-grass.JPG\t2013-12-04 14:58:49\tt\t4000\t2667\t1.5\t\tandrekoch\tAndre\tKoch\t\t\t\t\t\t\t\t\t\t\t\t4296224\t30072\tblack road in between white and brown grass across forest photo during sunset\t\t\t\t\tLPBM;~RkM|of~VRkNHof%1RjRkof"
+      },
+      {
+        "photo_id\tphoto_url\tphoto_image_url\tphoto_submitted_at\tphoto_featured\tphoto_width\tphoto_height\tphoto_aspect_ratio\tphoto_description\tphotographer_username\tphotographer_first_name\tphotographer_last_name\texif_camera_make\texif_camera_model\texif_iso\texif_aperture_value\texif_focal_length\texif_exposure_time\tphoto_location_name\tphoto_location_latitude\tphoto_location_longitude\tphoto_location_country\tphoto_location_city\tstats_views\tstats_downloads\tai_description\tai_primary_landmark_name\tai_primary_landmark_latitude\tai_primary_landmark_longitude\tai_primary_landmark_confidence\tblur_hash": "DlsOa5moK4w\thttps://unsplash.com/photos/DlsOa5moK4w\thttps://images.unsplash.com/reserve/dRA4UuMBR2K5pxchYcxA_IMG_6965.JPG\t2014-07-10 17:19:38\tt\t5184\t3456\t1.5\tFresh blueberries\tmajkmmiklavc\tMajk\tM.\tCanon\tCanon EOS 600D\t200\t1.8\t50.0\t1/125\t\t\t\t\t\t8731049\t26411\tselective focus of blueberry plant\t\t\t\t\tLiJ+M4s=-pj;~qx]RpbXx1ogRkob"
+      },
+      {
+        "photo_id\tphoto_url\tphoto_image_url\tphoto_submitted_at\tphoto_featured\tphoto_width\tphoto_height\tphoto_aspect_ratio\tphoto_description\tphotographer_username\tphotographer_first_name\tphotographer_last_name\texif_camera_make\texif_camera_model\texif_iso\texif_aperture_value\texif_focal_length\texif_exposure_time\tphoto_location_name\tphoto_location_latitude\tphoto_location_longitude\tphoto_location_country\tphoto_location_city\tstats_views\tstats_downloads\tai_description\tai_primary_landmark_name\tai_primary_landmark_latitude\tai_primary_landmark_longitude\tai_primary_landmark_confidence\tblur_hash": "XBGacbT3vXI\thttps://unsplash.com/photos/XBGacbT3vXI\thttps://images.unsplash.com/photo-1436335231969-f3271f28670d\t2015-07-08 05:54:38.486126\tt\t6000\t4000\t1.5\t\tshooshanig\tShooshanig\tBerumen\tNIKON CORPORATION\tNIKON D3300\t400\t10.0\t23.0\t1/320\t\t\t\t\t\t2224540\t19250\tphotography of calm beach side\t\t\t\t\tLSL}HBR*a{fP_NWVoej[x^s.j[ay"
+      }
+    ],
+    "found": true
+  },
+  "keywords": {
+    "parts": [
+      "keywords.csv"
+    ],
+    "rows": 755782,
+    "columns": [
+      "photo_id\tkeyword\tai_service_1_confidence\tai_service_2_confidence\tsuggested_by_user\tuser_suggestion_source"
+    ],
+    "preview": [
+      {
+        "photo_id\tkeyword\tai_service_1_confidence\tai_service_2_confidence\tsuggested_by_user\tuser_suggestion_source": "zzwTUqvzIFg\tuniverse\t96.990119934082003\t\tf\t"
+      },
+      {
+        "photo_id\tkeyword\tai_service_1_confidence\tai_service_2_confidence\tsuggested_by_user\tuser_suggestion_source": "zzwTUqvzIFg\twallpapers\t\t\tt\tadmin"
+      },
+      {
+        "photo_id\tkeyword\tai_service_1_confidence\tai_service_2_confidence\tsuggested_by_user\tuser_suggestion_source": "zzwTUqvzIFg\tnature\t99.825332641601605\t\tt\tadmin"
+      }
+    ],
+    "found": true
+  },
+  "collections": {
+    "parts": [
+      "collections.csv"
+    ],
+    "rows": 2096755,
+    "columns": [
+      "photo_id\tcollection_id\tcollection_title\tphoto_collected_at\tcollection_type"
+    ],
+    "preview": [
+      {
+        "photo_id\tcollection_id\tcollection_title\tphoto_collected_at\tcollection_type": "sYzFIusQp3Q\t994\tOcean Bliss\t2016-02-23 20:59:57.989651\tcollection"
+      },
+      {
+        "photo_id\tcollection_id\tcollection_title\tphoto_collected_at\tcollection_type": "7x4dOkulU9E\t143845\t12、Valhalla-Twelve\t2016-02-28 15:02:19.473947\tcollection"
+      },
+      {
+        "photo_id\tcollection_id\tcollection_title\tphoto_collected_at\tcollection_type": "pIfF5Q8AYaE\t161986\tlandscapes\t2016-03-16 08:01:37.736831\tcollection"
+      }
+    ],
+    "found": true
+  },
+  "conversions": {
+    "parts": [
+      "conversions.csv"
+    ],
+    "rows": 6181524,
+    "columns": [
+      "converted_at\tconversion_type\tkeyword\tphoto_id\tanonymous_user_id\tconversion_country"
+    ],
+    "preview": [
+      {
+        "converted_at\tconversion_type\tkeyword\tphoto_id\tanonymous_user_id\tconversion_country": "2024-01-01 00:00:13.341\tdownload\troses\tpDGNBK9A0sk\t359144ff-1364-4128-b084-687ccc952bec\tUS"
+      },
+      {
+        "converted_at\tconversion_type\tkeyword\tphoto_id\tanonymous_user_id\tconversion_country": "2024-01-01 00:00:24.932\tdownload\tpug\tdbX44TTNxJ0\t8cf3c572-97e9-4cd6-bb99-347b3b275c89\tUS"
+      },
+      {
+        "converted_at\tconversion_type\tkeyword\tphoto_id\tanonymous_user_id\tconversion_country": "2024-01-01 00:00:26.901\tdownload\tpug\tNZlbve4F1xk\t8cf3c572-97e9-4cd6-bb99-347b3b275c89\tUS"
+      }
+    ],
+    "found": true
+  },
+  "colors": {
+    "parts": [
+      "colors.csv"
+    ],
+    "rows": 244953,
+    "columns": [
+      "photo_id\thex\tred\tgreen\tblue\tkeyword\tcoverage\tscore"
+    ],
+    "preview": [
+      {
+        "photo_id\thex\tred\tgreen\tblue\tkeyword\tcoverage\tscore": "eNI-0vy7IBE\t1F3E42\t31\t62\t66\tdarkslategray\t0.031466666609048843\t0.064757578074932098"
+      },
+      {
+        "photo_id\thex\tred\tgreen\tblue\tkeyword\tcoverage\tscore": "6L_Jg8RMjmo\t9C73A2\t156\t115\t162\tlightslategray\t0.015066666528582573\t0.064019329845905304"
+      },
+      {
+        "photo_id\thex\tred\tgreen\tblue\tkeyword\tcoverage\tscore": "6L_Jg8RMjmo\tB67FAD\t182\t127\t173\trosybrown\t0.017244445160031319\t0.057041633874177933"
+      }
+    ],
+    "found": true
+  }
+}
