@@ -506,7 +506,11 @@ def build_parser() -> argparse.ArgumentParser:
     dl = sub.add_parser("download-from-csv", help="根据 CSV 的 photo_image_url 下载图片")
     dl.add_argument("--input-csv", type=Path, required=True, help="输入 CSV（需含 photo_id/photo_image_url）")
     dl.add_argument("--output-dir", type=Path, default=Path("outputs/images"), help="下载目录")
-    dl.add_argument("--delay", type=float, default=0.2, help="每次下载后的间隔秒数")
+    dl.add_argument("--workers", type=int, default=8, help="并发下载 worker 数，默认: 8")
+    dl.add_argument("--timeout", type=float, default=20.0, help="单次请求超时秒数，默认: 20")
+    dl.add_argument("--retries", type=int, default=3, help="失败重试次数，默认: 3")
+    dl.add_argument("--backoff", type=float, default=1.0, help="指数退避基数秒数，默认: 1.0")
+    dl.add_argument("--delay", type=float, default=0.0, help="可选限速：每个任务结束后的等待秒数")
     dl.add_argument("--limit", type=int, default=0, help="最多下载多少条，0 表示不限制")
 
     return parser
@@ -541,6 +545,10 @@ def main() -> int:
             output_dir=args.output_dir,
             delay_s=args.delay,
             limit=args.limit,
+            workers=args.workers,
+            timeout=args.timeout,
+            retries=args.retries,
+            backoff=args.backoff,
         )
 
     parser.print_help()
