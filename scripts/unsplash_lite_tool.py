@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
 import glob
 import json
@@ -325,7 +326,6 @@ def download_with_retry(
 
         if should_retry and attempt < attempts - 1:
             wait_s = backoff * (2**attempt)
-            print(f"下载重试 {attempt + 1}/{attempts - 1}: {target.name}，原因: {err_summary}，等待 {wait_s:.1f}s")
             time.sleep(wait_s)
             continue
 
@@ -334,24 +334,11 @@ def download_with_retry(
 
     raise RuntimeError("下载失败：未知错误")
 
-def cmd_download_from_csv(input_csv: Path, output_dir: Path, delay_s: float, limit: int) -> int:
-    if not input_csv.exists():
-        print(f"输入文件不存在: {input_csv}")
-        return 2
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    success = 0
-    failed = 0
+def build_download_tasks(rows: Sequence[Dict[str, str]], output_dir: Path) -> Tuple[List[Dict[str, str]], int]:
+    tasks: List[Dict[str, str]] = []
     skipped = 0
 
-    with input_csv.open("r", encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    if limit > 0:
-        rows = rows[:limit]
-
-    for idx, row in enumerate(rows, start=1):
+    for row in rows:
         photo_id = row.get("photo_id", "")
         url = row.get("photo_image_url", "")
         if not photo_id or not url:
@@ -364,22 +351,112 @@ def cmd_download_from_csv(input_csv: Path, output_dir: Path, delay_s: float, lim
             skipped += 1
             continue
 
-        try:
-            download_with_retry(
-                url=url,
-                target=target,
-                timeout=20,
-                retries=3,
-                backoff=1.0,
-                user_agent="UnsplashLiteTool/1.0",
+        tasks.append(
+            {
+                "photo_id": photo_id,
+                "url": url,
+                "target": str(target),
+            }
+        )
+
+    return tasks, skipped
+
+def run_download_task(
+    task: Dict[str, str],
+    timeout: float,
+    retries: int,
+    backoff: float,
+    delay_s: float,
+) -> Dict[str, object]:
+    photo_id = task["photo_id"]
+    url = task["url"]
+    target = Path(task["target"])
+    started = time.perf_counter()
+
+    result: Dict[str, object] = {
+        "photo_id": photo_id,
+        "status": "failed",
+        "error": "",
+        "bytes": 0,
+        "elapsed": 0.0,
+    }
+
+    try:
+        download_with_retry(
+            url=url,
+            target=target,
+            timeout=timeout,
+            retries=retries,
+            backoff=backoff,
+            user_agent="UnsplashLiteTool/1.0",
+        )
+        result["status"] = "ok"
+        result["bytes"] = target.stat().st_size if target.exists() else 0
+    except Exception as e:
+        result["error"] = str(e)
+    finally:
+        result["elapsed"] = time.perf_counter() - started
+        if delay_s > 0:
+            time.sleep(delay_s)
+
+    return result
+
+def cmd_download_from_csv(
+    input_csv: Path,
+    output_dir: Path,
+    delay_s: float,
+    limit: int,
+    workers: int,
+    timeout: float,
+    retries: int,
+    backoff: float,
+) -> int:
+    if not input_csv.exists():
+        print(f"输入文件不存在: {input_csv}")
+        return 2
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with input_csv.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if limit > 0:
+        rows = rows[:limit]
+
+    tasks, skipped = build_download_tasks(rows, output_dir)
+    total = len(tasks)
+    success = 0
+    failed = 0
+
+    if total == 0:
+        print(f"没有可下载任务（跳过 {skipped} 条）。")
+        return 0
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(workers, 1)) as executor:
+        futures = [
+            executor.submit(
+                run_download_task,
+                task,
+                timeout,
+                retries,
+                backoff,
+                delay_s,
             )
-            success += 1
-            print(f"[{idx}/{len(rows)}] 下载成功: {target.name}")
-            if delay_s > 0:
-                time.sleep(delay_s)
-        except Exception as e:
-            skipped += 1
-            print(f"[{idx}/{len(rows)}] 下载失败: {photo_id} ({e})")
+            for task in tasks
+        ]
+
+        for done, future in enumerate(concurrent.futures.as_completed(futures), start=1):
+            result = future.result()
+            photo_id = result["photo_id"]
+            status = result["status"]
+            elapsed = result["elapsed"]
+            if status == "ok":
+                success += 1
+                size = result["bytes"]
+                print(f"[{done}/{total}] 下载成功: {photo_id} ({size} bytes, {elapsed:.2f}s)")
+            else:
+                failed += 1
+                print(f"[{done}/{total}] 下载失败: {photo_id} ({result['error']}, {elapsed:.2f}s)")
 
     print(f"完成：成功 {success}，失败 {failed}，跳过 {skipped}，目录 {output_dir}")
     return 0
