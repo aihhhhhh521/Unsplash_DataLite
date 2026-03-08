@@ -2,6 +2,51 @@
 
 > 适用目录：`unsplash-research-dataset-lite-latest/`
 
+## 0. 先回答你最关心的两个问题
+
+### Q1：当前是不是只有图片元数据和链接？还需要原始图像文件吗？
+
+是的，Lite 数据集本体主要是结构化表数据（如 `photos/keywords/...`）和图片 URL，不会把全部原始图片二进制直接打包进来。
+
+- 如果你做的是**统计分析、检索、标签处理、关键词实验**，只用表数据通常就够了。
+- 如果你做的是**CV 训练（分类/检测/多模态）**，就需要把你筛选出的图片 URL 再下载到本地。
+
+本仓库新增了 `download-from-csv` 命令：
+
+```bash
+python scripts/unsplash_lite_tool.py download-from-csv \
+  --input-csv outputs/sampled_photos.csv \
+  --output-dir outputs/images \
+  --delay 0.2
+```
+
+> 建议不要一次性全量下载，先筛选 + 采样，再下载，能明显节省存储和时间。
+
+### Q2：如何做关键词筛选 + 随机采样，得到一定数量结果图片？
+
+本仓库新增了 `filter-sample` 命令，可直接从 `keywords` + `photos` 联合生成结果 CSV：
+
+```bash
+python scripts/unsplash_lite_tool.py \
+  --dataset-dir unsplash-research-dataset-lite-latest \
+  filter-sample \
+  --keywords forest,mountain,snow \
+  --sample-size 200 \
+  --seed 42 \
+  --output-csv outputs/sampled_photos.csv
+```
+
+然后再下载：
+
+```bash
+python scripts/unsplash_lite_tool.py download-from-csv \
+  --input-csv outputs/sampled_photos.csv \
+  --output-dir outputs/images \
+  --limit 200
+```
+
+---
+
 ## 1. 数据集内容概览
 
 根据官方文档，Lite 数据集通常包含 5 张主表（可能是 `.tsv` 或 `.csv`，也可能按分片方式存储）：
@@ -12,7 +57,7 @@
 4. `conversions`：图片下载转化相关统计
 5. `colors`：图片颜色分布信息
 
-你的目录截图显示为 `*.csv000`，这属于分片文件命名方式（例如 `photos.csv000`、`photos.csv001` ...），脚本需要支持自动拼接读取。
+你的目录截图显示为 `*.csv000`，这属于分片文件命名方式（例如 `photos.csv000`、`photos.csv001` ...），脚本会自动拼接读取。
 
 ---
 
@@ -33,7 +78,7 @@
 
 ---
 
-## 3. 我为你准备的工具脚本
+## 3. 工具脚本说明
 
 文件：`scripts/unsplash_lite_tool.py`
 
@@ -41,7 +86,9 @@
 
 - 自动识别普通文件和分片文件（如 `photos.csv000`）
 - 统计各表行数、字段列表、前几行样例
-- 输出 “photo_id + keyword” 样例，快速验证数据可用性
+- 输出 “photo_id + keyword” 样例
+- 按关键词筛选 + 随机采样，导出带 URL 的 CSV
+- 根据 CSV 批量下载图片
 
 ### 3.1 运行环境
 
@@ -59,35 +106,57 @@ python scripts/unsplash_lite_tool.py --help
 python scripts/unsplash_lite_tool.py --dataset-dir unsplash-research-dataset-lite-latest summary --pretty
 ```
 
-你会得到一个 JSON，包含：
-
-- 表是否找到
-- 使用了哪些分片文件
-- 行数（rows）
-- 字段名（columns）
-- 前 3 条示例（preview）
-
 ### 3.4 抽样查看关键词映射
 
 ```bash
 python scripts/unsplash_lite_tool.py --dataset-dir unsplash-research-dataset-lite-latest keyword-samples --limit 30
 ```
 
-输出示例：
+### 3.5 关键词筛选 + 随机采样
 
-```text
-001. abc123	forest
-002. xyz456	mountain
+默认是“命中任一关键词即可”：
+
+```bash
+python scripts/unsplash_lite_tool.py \
+  --dataset-dir unsplash-research-dataset-lite-latest \
+  filter-sample \
+  --keywords beach,sunset \
+  --sample-size 100 \
+  --seed 7 \
+  --output-csv outputs/beach_sunset_sample.csv
+```
+
+如果你希望“必须同时包含全部关键词”，加 `--require-all`：
+
+```bash
+python scripts/unsplash_lite_tool.py \
+  --dataset-dir unsplash-research-dataset-lite-latest \
+  filter-sample \
+  --keywords forest,mountain \
+  --require-all \
+  --sample-size 80 \
+  --seed 123 \
+  --output-csv outputs/forest_mountain_all.csv
+```
+
+### 3.6 批量下载采样结果中的图片
+
+```bash
+python scripts/unsplash_lite_tool.py download-from-csv \
+  --input-csv outputs/forest_mountain_all.csv \
+  --output-dir outputs/images_forest_mountain \
+  --delay 0.3
 ```
 
 ---
 
 ## 4. 推荐工作流（从 0 到可分析）
 
-1. 把数据分片和 `README.md / DOCS.md / TERMS.md` 放在同一目录（你当前就是这个结构）。
-2. 先跑 `summary`，确认每张表都能被识别。
-3. 再跑 `keyword-samples`，快速检查核心关联字段是否可用。
-4. 如果你后续做模型训练，建议先导出一个 1% 子集进行迭代开发（节省 I/O 和算力）。
+1. 放好数据分片与文档。
+2. 跑 `summary`，确认表都能识别。
+3. 跑 `filter-sample`，先拿一个小样本 CSV。
+4. 确认无误后，再跑 `download-from-csv` 下载图片。
+5. 对下载结果做模型训练或可视化分析。
 
 ---
 
@@ -106,13 +175,7 @@ python scripts/unsplash_lite_tool.py --dataset-dir unsplash-research-dataset-lit
 
 - 无需改代码，脚本会按序号自动拼接读取。
 
----
+### Q4：`photo_image_url` 能直接加尺寸参数吗？
 
-## 6. 下一步可以继续做什么
-
-如果你愿意，我可以继续给你补这三部分代码：
-
-1. `to_parquet.py`：把原始 CSV/TSV 分片转为 Parquet（加速分析）
-2. `build_training_subset.py`：按关键词/作者/时间分层抽样
-3. `basic_eda.ipynb`：直接可运行的数据探索 Notebook（分布、热词、作者活跃度）
+- 可以，Unsplash 图片 URL 支持动态参数（例如宽高、质量）。你可在下载前自行拼接参数，做统一分辨率数据集。
 
