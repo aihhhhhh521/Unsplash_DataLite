@@ -17,9 +17,11 @@ import glob
 import json
 import random
 import re
+import ssl
 import sys
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Dict, Iterator, List, Sequence, Tuple
@@ -274,6 +276,63 @@ def choose_image_filename(photo_id: str, url: str) -> str:
     suffix = Path(parsed.path).suffix.lower() or ".jpg"
     return f"{photo_id}{suffix}"
 
+def download_with_retry(
+    url: str,
+    target: Path,
+    timeout: float,
+    retries: int,
+    backoff: float,
+    user_agent: str,
+) -> None:
+    context = ssl.create_default_context()
+    retry_status_codes = {408, 429, 500, 502, 503, 504}
+    attempts = max(retries, 0) + 1
+
+    for attempt in range(attempts):
+        part_path = target.with_name(f"{target.name}.part")
+        should_retry = False
+        err_summary = ""
+
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": user_agent})
+            with urllib.request.urlopen(req, timeout=timeout, context=context) as resp:
+                status = getattr(resp, "status", 200)
+                if not (200 <= status < 300):
+                    if status in retry_status_codes:
+                        raise urllib.error.HTTPError(url, status, f"HTTP {status}", resp.headers, None)
+                    raise RuntimeError(f"HTTP {status} 不可重试")
+
+                with part_path.open("wb") as out_f:
+                    while True:
+                        chunk = resp.read(1024 * 64)
+                        if not chunk:
+                            break
+                        out_f.write(chunk)
+            part_path.replace(target)
+            return
+        except urllib.error.HTTPError as e:
+            if e.code in retry_status_codes:
+                should_retry = True
+                err_summary = f"HTTP {e.code}"
+            else:
+                raise RuntimeError(f"HTTP {e.code} 不可重试") from e
+        except (ssl.SSLError, urllib.error.URLError, TimeoutError, ConnectionResetError) as e:
+            should_retry = True
+            err_summary = f"{type(e).__name__}: {e}"
+        finally:
+            if part_path.exists():
+                part_path.unlink(missing_ok=True)
+
+        if should_retry and attempt < attempts - 1:
+            wait_s = backoff * (2**attempt)
+            print(f"下载重试 {attempt + 1}/{attempts - 1}: {target.name}，原因: {err_summary}，等待 {wait_s:.1f}s")
+            time.sleep(wait_s)
+            continue
+
+        if should_retry:
+            raise RuntimeError(f"下载失败，已重试 {attempt} 次: {err_summary}")
+
+    raise RuntimeError("下载失败：未知错误")
 
 def cmd_download_from_csv(input_csv: Path, output_dir: Path, delay_s: float, limit: int) -> int:
     if not input_csv.exists():
@@ -281,8 +340,9 @@ def cmd_download_from_csv(input_csv: Path, output_dir: Path, delay_s: float, lim
         return 2
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    ok = 0
-    skip = 0
+    success = 0
+    failed = 0
+    skipped = 0
 
     with input_csv.open("r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
@@ -295,26 +355,33 @@ def cmd_download_from_csv(input_csv: Path, output_dir: Path, delay_s: float, lim
         photo_id = row.get("photo_id", "")
         url = row.get("photo_image_url", "")
         if not photo_id or not url:
-            skip += 1
+            skipped += 1
             continue
 
         filename = choose_image_filename(photo_id, url)
         target = output_dir / filename
         if target.exists():
-            skip += 1
+            skipped += 1
             continue
 
         try:
-            urllib.request.urlretrieve(url, target)
-            ok += 1
+            download_with_retry(
+                url=url,
+                target=target,
+                timeout=20,
+                retries=3,
+                backoff=1.0,
+                user_agent="UnsplashLiteTool/1.0",
+            )
+            success += 1
             print(f"[{idx}/{len(rows)}] 下载成功: {target.name}")
             if delay_s > 0:
                 time.sleep(delay_s)
         except Exception as e:
-            skip += 1
+            skipped += 1
             print(f"[{idx}/{len(rows)}] 下载失败: {photo_id} ({e})")
 
-    print(f"完成：成功 {ok}，跳过/失败 {skip}，目录 {output_dir}")
+    print(f"完成：成功 {success}，失败 {failed}，跳过 {skipped}，目录 {output_dir}")
     return 0
 
 
